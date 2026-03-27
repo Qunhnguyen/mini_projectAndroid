@@ -3,13 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.appandroid"
-    compileSdk {
-        version = release(36)
-    }
+    namespace = "com.example.shopping_app"
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.appandroid"
+        applicationId = "com.example.shopping_app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -38,6 +36,15 @@ dependencies {
     implementation(libs.material)
     implementation(libs.activity)
     implementation(libs.constraintlayout)
+    implementation(libs.recyclerview)
+    
+    // Glide for image loading
+    implementation(libs.glide)
+    
+    // Room components
+    implementation(libs.room.runtime)
+    annotationProcessor(libs.room.compiler)
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
