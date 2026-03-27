@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.Button;
 import android.widget.GridLayout;
 import android.widget.ImageButton;
@@ -141,7 +142,7 @@ public class SeatSelectionActivity extends AppCompatActivity {
             
             runOnUiThread(() -> {
                 Toast.makeText(this, "Đặt vé thành công!", Toast.LENGTH_LONG).show();
-                // Luồng: Hiển thị vé đã đặt (Dùng ReceiptActivity cũ hoặc trang thông báo)
+                // Luồng: Hiển thị vé đã đặt
                 Intent intent = new Intent(this, MainActivity.class);
                 intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 startActivity(intent);
