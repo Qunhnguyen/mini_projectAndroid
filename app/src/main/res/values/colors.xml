@@ -2,4 +2,44 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="primary">#103A4A</color>
+    <color name="primary_dark">#08242D</color>
+    <color name="primary_light">#2F6B78</color>
+    <color name="primary_variant">#14505F</color>
+
+    <color name="accent">#F47C48</color>
+    <color name="accent_light">#FFD1BE</color>
+
+    <color name="gradient_start">#082A33</color>
+    <color name="gradient_end">#14505F</color>
+    <color name="gradient_accent_start">#F47C48</color>
+    <color name="gradient_accent_end">#F9A35D</color>
+
+    <color name="bg_light">#F6F2EC</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="surface_variant">#E4EEF0</color>
+    <color name="surface_soft">#EFF5F6</color>
+
+    <color name="text_primary">#172027</color>
+    <color name="text_secondary">#63707A</color>
+    <color name="text_hint">#98A2A9</color>
+
+    <color name="price_color">#C25639</color>
+
+    <color name="status_paid">#1E8E6E</color>
+    <color name="status_pending">#D48A1F</color>
+
+    <color name="divider">#D7E0E3</color>
+
+    <color name="chip_selected">#123E4C</color>
+    <color name="chip_unselected">#E7EFF1</color>
+    <color name="chip_text_selected">#FFFFFFFF</color>
+    <color name="chip_text_unselected">#22313A</color>
+
+    <color name="swatch_1">#355C7D</color>
+    <color name="swatch_2">#C06C84</color>
+    <color name="swatch_3">#F67280</color>
+    <color name="swatch_4">#6C5B7B</color>
+    <color name="swatch_5">#2A9D8F</color>
 </resources>
