@@ -8,34 +8,39 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
 import com.example.shopping_app.data.AppDatabase;
 import com.example.shopping_app.data.entity.Movie;
-import com.example.shopping_app.data.entity.Theater;
 import com.example.shopping_app.data.entity.ShowTimes;
+import com.example.shopping_app.data.entity.Theater;
 import com.example.shopping_app.data.entity.User;
 import com.google.android.material.button.MaterialButton;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Màn hình chính của ứng dụng Movie Ticket.
- * Hiển thị danh sách phim đang chiếu và quản lý trạng thái người dùng.
- */
 public class MainActivity extends AppCompatActivity {
+    private static final String TAG = "MainActivity";
+
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     private AppDatabase db;
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private MovieAdapter movieAdapter;
-    private List<Movie> movieList = new ArrayList<>();
+    private final List<Movie> movieList = new ArrayList<>();
     private PrefManager pref;
 
-    private TextView tvHomeGreeting, tvHomeSummary, tvHomeCartSummary, tvProductsHint;
-    private MaterialButton btnHomePrimary, btnHomeSecondary;
+    private TextView tvHomeGreeting;
+    private TextView tvHomeSummary;
+    private TextView tvHomeCartSummary;
+    private TextView tvProductsHint;
+    private MaterialButton btnHomePrimary;
+    private MaterialButton btnHomeSecondary;
     private LinearLayout layoutCategories;
 
     @Override
@@ -50,17 +55,11 @@ public class MainActivity extends AppCompatActivity {
         executeDataLoading();
     }
 
-    /**
-     * Khởi tạo các thành phần cốt lõi của ứng dụng
-     */
     private void setupDependencies() {
         db = AppDatabase.getInstance(this);
         pref = new PrefManager(this);
     }
 
-    /**
-     * Ánh xạ các thành phần giao diện từ XML
-     */
     private void initViews() {
         tvHomeGreeting = findViewById(R.id.tv_home_greeting);
         tvHomeSummary = findViewById(R.id.tv_home_summary);
@@ -69,44 +68,51 @@ public class MainActivity extends AppCompatActivity {
         btnHomePrimary = findViewById(R.id.btn_home_primary);
         btnHomeSecondary = findViewById(R.id.btn_home_secondary);
         layoutCategories = findViewById(R.id.layout_categories);
-        
-        if (tvProductsHint != null) {
-            tvProductsHint.setText("Đang tải danh sách phim...");
-        }
+
+        tvProductsHint.setText(R.string.movies_loading);
+        populateCategories();
     }
 
-    /**
-     * Thiết lập danh sách hiển thị phim (RecyclerView)
-     */
     private void setupRecyclerView() {
         RecyclerView rvMovies = findViewById(R.id.rv_products);
-        if (rvMovies != null) {
-            rvMovies.setLayoutManager(new GridLayoutManager(this, 2));
-            movieAdapter = new MovieAdapter(movieList, movie -> {
-                navigateToShowtimes(movie.getMovieId());
-            });
-            rvMovies.setAdapter(movieAdapter);
-        }
+        rvMovies.setLayoutManager(new GridLayoutManager(this, 2));
+        movieAdapter = new MovieAdapter(movieList, movie -> navigateToShowtimes(movie.getMovieId()));
+        rvMovies.setAdapter(movieAdapter);
     }
 
-    /**
-     * Gán các sự kiện click cho các nút bấm
-     */
     private void attachListeners() {
-        // Nút trên Toolbar
         ImageButton btnCart = findViewById(R.id.btn_toolbar_cart);
-        if (btnCart != null) {
-            btnCart.setOnClickListener(v -> navigateToMyTickets());
-        }
+        btnCart.setOnClickListener(v -> navigateToMyTickets());
 
-        // Nút trên thẻ chào mừng
         btnHomePrimary.setOnClickListener(v -> handlePrimaryAction());
         btnHomeSecondary.setOnClickListener(v -> navigateToMyTickets());
     }
 
-    /**
-     * Bắt đầu tiến trình tải dữ liệu từ database
-     */
+    private void populateCategories() {
+        layoutCategories.removeAllViews();
+        String[] categories = {
+                getString(R.string.category_now_showing),
+                getString(R.string.category_scifi),
+                getString(R.string.category_drama),
+                getString(R.string.category_family)
+        };
+
+        for (String category : categories) {
+            TextView chip = new TextView(this);
+            chip.setText(category);
+            chip.setPadding(32, 18, 32, 18);
+            chip.setTextColor(getColor(R.color.text_primary));
+            chip.setBackgroundResource(R.drawable.bg_chip_unselected);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            params.setMarginEnd(16);
+            chip.setLayoutParams(params);
+            layoutCategories.addView(chip);
+        }
+    }
+
     private void executeDataLoading() {
         executorService.execute(() -> {
             try {
@@ -114,7 +120,8 @@ public class MainActivity extends AppCompatActivity {
                 loadMovies();
                 updateUserInterface();
             } catch (Exception e) {
-                Log.e("MainActivity", "Lỗi tải dữ liệu: " + e.getMessage());
+                Log.e(TAG, "Failed to load home data", e);
+                runOnUiThread(() -> showToast(getString(R.string.error_load_home)));
             }
         });
     }
@@ -122,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
     private void handlePrimaryAction() {
         if (pref.isLoggedIn()) {
             pref.logout();
-            showToast("Đã đăng xuất thành công!");
+            showToast(getString(R.string.logout_success));
             updateUserInterface();
         } else {
             startActivity(new Intent(this, LoginActivity.class));
@@ -130,79 +137,108 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void navigateToShowtimes(int movieId) {
-        Intent intent = new Intent(MainActivity.this, ShowtimesActivity.class);
-        intent.putExtra("MOVIE_ID", movieId);
+        Intent intent = new Intent(this, ShowtimesActivity.class);
+        intent.putExtra(AppConstants.EXTRA_MOVIE_ID, movieId);
         startActivity(intent);
     }
 
     private void navigateToMyTickets() {
         if (pref.isLoggedIn()) {
             startActivity(new Intent(this, MyTicketsActivity.class));
-        } else {
-            showToast("Vui lòng đăng nhập để xem vé!");
-            startActivity(new Intent(this, LoginActivity.class));
+            return;
         }
+
+        showToast(getString(R.string.prompt_login_for_tickets));
+        startActivity(new Intent(this, LoginActivity.class));
     }
 
     private void loadMovies() {
         List<Movie> movies = db.movieDao().getAllMovies();
         runOnUiThread(() -> {
-            if (movieAdapter != null) {
-                movieAdapter.updateData(movies);
-            }
-            if (tvProductsHint != null) {
-                tvProductsHint.setText(movies.size() + " bộ phim đang chiếu");
-            }
+            movieAdapter.updateData(movies);
+            tvProductsHint.setText(getString(R.string.movies_count, movies.size()));
         });
     }
 
     private void updateUserInterface() {
         runOnUiThread(() -> {
             if (pref.isLoggedIn()) {
-                tvHomeGreeting.setText("Xin chào!");
-                tvHomeSummary.setText("Chào mừng bạn quay trở lại. Hãy chọn phim và đặt vé ngay.");
-                btnHomePrimary.setText("Đăng xuất");
-                btnHomeSecondary.setText("Vé của tôi");
+                tvHomeGreeting.setText(R.string.home_greeting_logged_in);
+                tvHomeSummary.setText(R.string.home_summary_logged_in);
+                btnHomePrimary.setText(R.string.action_logout);
+                btnHomeSecondary.setText(R.string.action_my_tickets);
                 tvHomeCartSummary.setVisibility(View.GONE);
             } else {
-                tvHomeGreeting.setText("Movie Ticket App");
-                tvHomeSummary.setText("Khám phá hàng ngàn bộ phim bom tấn và đặt vé dễ dàng.");
+                tvHomeGreeting.setText(R.string.app_name);
+                tvHomeSummary.setText(R.string.home_summary_guest);
                 tvHomeCartSummary.setVisibility(View.VISIBLE);
-                tvHomeCartSummary.setText("Tài khoản trải nghiệm: admin / 123456");
-                btnHomePrimary.setText("Đăng nhập");
-                btnHomeSecondary.setText("Bắt đầu ngay");
+                tvHomeCartSummary.setText(
+                        getString(
+                                R.string.demo_account_message,
+                                AppConstants.DEMO_USERNAME,
+                                AppConstants.DEMO_PASSWORD
+                        )
+                );
+                btnHomePrimary.setText(R.string.action_login);
+                btnHomeSecondary.setText(R.string.action_get_started);
             }
         });
     }
 
     private void seedData() {
-        if (db.movieDao().getAllMovies().isEmpty()) {
-            // Khởi tạo dữ liệu người dùng mặc định
-            db.userDao().insert(new User("admin", "123456", "Quản trị viên", "admin@movieticket.com"));
-
-            // Danh sách phim bom tấn
-            db.movieDao().insert(new Movie("Oppenheimer", "Kiệt tác về cha đẻ bom nguyên tử của Christopher Nolan", 180, "Tiểu sử / Chính kịch", "https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=2059&auto=format&fit=crop"));
-            db.movieDao().insert(new Movie("Interstellar", "Hành trình vĩ đại xuyên không gian để cứu lấy nhân loại", 169, "Khoa học viễn tưởng", "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=2072&auto=format&fit=crop"));
-            db.movieDao().insert(new Movie("Joker: Folie à Deux", "Sự điên rồ nhân đôi trong phần tiếp theo đầy ám ảnh", 138, "Tội phạm / Nhạc kịch", "https://images.unsplash.com/photo-1531259683007-016a7b628fc3?q=80&w=1974&auto=format&fit=crop"));
-            db.movieDao().insert(new Movie("Avatar: The Way of Water", "Trở lại hành tinh Pandora với những khung hình đại dương choáng ngợp", 192, "Hành động / Phiêu lưu", "https://images.unsplash.com/photo-1598327105666-5b89351aff97?q=80&w=2070&auto=format&fit=crop"));
-
-            // Hệ thống rạp chiếu
-            db.theaterDao().insert(new Theater("CGV Vincom Center", "72 Lê Thánh Tôn, Quận 1"));
-            db.theaterDao().insert(new Theater("Lotte Cinema Cantavil", "Tầng 7 Cantavil Premier, Quận 2"));
-
-            List<Movie> movies = db.movieDao().getAllMovies();
-            List<Theater> theaters = db.theaterDao().getAllTheaters();
-
-            if (!movies.isEmpty() && !theaters.isEmpty()) {
-                // Thiết lập lịch chiếu mẫu cho phim đầu tiên
-                db.showTimesDao().insert(new ShowTimes(movies.get(0).getMovieId(), theaters.get(0).getTheaterId(), "19:00 - Hôm nay", 120000));
-                db.showTimesDao().insert(new ShowTimes(movies.get(0).getMovieId(), theaters.get(1).getTheaterId(), "21:30 - Ngày mai", 95000));
-                
-                // Lịch chiếu cho phim thứ hai
-                db.showTimesDao().insert(new ShowTimes(movies.get(1).getMovieId(), theaters.get(1).getTheaterId(), "18:00 - Cuối tuần", 110000));
-            }
-            Log.d("Database", "Khởi tạo dữ liệu mẫu hoàn tất.");
+        if (!db.movieDao().getAllMovies().isEmpty()) {
+            return;
         }
+
+        db.userDao().insert(new User(
+                AppConstants.DEMO_USERNAME,
+                AppConstants.DEMO_PASSWORD,
+                "Quản trị viên",
+                "admin@movieticket.com"
+        ));
+
+        db.movieDao().insert(new Movie(
+                "Oppenheimer",
+                "Kiệt tác về cha đẻ bom nguyên tử của Christopher Nolan",
+                180,
+                "Tiểu sử / Chính kịch",
+                "https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=2059&auto=format&fit=crop"
+        ));
+        db.movieDao().insert(new Movie(
+                "Interstellar",
+                "Hành trình vĩ đại xuyên không gian để cứu lấy nhân loại",
+                169,
+                "Khoa học viễn tưởng",
+                "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=2072&auto=format&fit=crop"
+        ));
+        db.movieDao().insert(new Movie(
+                "Joker: Folie à Deux",
+                "Sự điên rồ nhân đôi trong phần tiếp theo đầy ám ảnh",
+                138,
+                "Tội phạm / Nhạc kịch",
+                "https://images.unsplash.com/photo-1531259683007-016a7b628fc3?q=80&w=1974&auto=format&fit=crop"
+        ));
+        db.movieDao().insert(new Movie(
+                "Avatar: The Way of Water",
+                "Trở lại hành tinh Pandora với những khung hình đại dương choáng ngợp",
+                192,
+                "Hành động / Phiêu lưu",
+                "https://images.unsplash.com/photo-1598327105666-5b89351aff97?q=80&w=2070&auto=format&fit=crop"
+        ));
+
+        db.theaterDao().insert(new Theater("CGV Vincom Center", "72 Lê Thánh Tôn, Quận 1"));
+        db.theaterDao().insert(new Theater("Lotte Cinema Cantavil", "Tầng 7 Cantavil Premier, Quận 2"));
+
+        List<Movie> movies = db.movieDao().getAllMovies();
+        List<Theater> theaters = db.theaterDao().getAllTheaters();
+
+        if (movies.size() < 2 || theaters.size() < 2) {
+            return;
+        }
+
+        db.showTimesDao().insert(new ShowTimes(movies.get(0).getMovieId(), theaters.get(0).getTheaterId(), "19:00 - Hôm nay", 120000));
+        db.showTimesDao().insert(new ShowTimes(movies.get(0).getMovieId(), theaters.get(1).getTheaterId(), "21:30 - Ngày mai", 95000));
+        db.showTimesDao().insert(new ShowTimes(movies.get(1).getMovieId(), theaters.get(1).getTheaterId(), "18:00 - Cuối tuần", 110000));
     }
 
     private void showToast(String message) {
@@ -218,8 +254,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (executorService != null) {
-            executorService.shutdown();
-        }
+        executorService.shutdown();
     }
 }

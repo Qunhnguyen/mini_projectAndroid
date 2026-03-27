@@ -5,20 +5,24 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
+
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+
 import com.example.shopping_app.data.AppDatabase;
 import com.example.shopping_app.data.entity.ShowTimes;
 import com.example.shopping_app.data.entity.Theater;
-import java.text.NumberFormat;
+
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ShowtimeAdapter extends RecyclerView.Adapter<ShowtimeAdapter.ShowtimeViewHolder> {
-
+    private final AppDatabase db;
+    private final OnShowtimeClickListener listener;
+    private final ExecutorService theaterExecutor = Executors.newCachedThreadPool();
     private List<ShowTimes> showTimesList;
-    private AppDatabase db;
-    private OnShowtimeClickListener listener;
 
     public interface OnShowtimeClickListener {
         void onShowtimeClick(ShowTimes showTime);
@@ -40,23 +44,17 @@ public class ShowtimeAdapter extends RecyclerView.Adapter<ShowtimeAdapter.Showti
     @Override
     public void onBindViewHolder(@NonNull ShowtimeViewHolder holder, int position) {
         ShowTimes showTime = showTimesList.get(position);
-        
-        // Load theater name in background or simple query if allowed
-        new Thread(() -> {
-            Theater theater = db.theaterDao().getTheaterById(showTime.getTheaterId());
-            if (theater != null) {
-                holder.tvTheater.post(() -> holder.tvTheater.setText(theater.getName()));
-            }
-        }).start();
 
+        holder.tvTheater.setText(R.string.label_loading_theater);
         holder.tvTime.setText(showTime.getDateTime());
-        NumberFormat formatter = NumberFormat.getCurrencyInstance(new Locale("vi", "VN"));
-        holder.tvPrice.setText(formatter.format(showTime.getPrice()));
+        holder.tvPrice.setText(UiUtils.formatCurrency(showTime.getPrice()));
+        holder.btnSelect.setOnClickListener(v -> listener.onShowtimeClick(showTime));
 
-        holder.btnSelect.setOnClickListener(v -> {
-            if (listener != null) {
-                listener.onShowtimeClick(showTime);
-            }
+        theaterExecutor.execute(() -> {
+            Theater theater = db.theaterDao().getTheaterById(showTime.getTheaterId());
+            holder.tvTheater.post(() -> holder.tvTheater.setText(
+                    theater != null ? theater.getName() : holder.itemView.getContext().getString(R.string.label_unknown_theater)
+            ));
         });
     }
 
@@ -65,9 +63,16 @@ public class ShowtimeAdapter extends RecyclerView.Adapter<ShowtimeAdapter.Showti
         return showTimesList != null ? showTimesList.size() : 0;
     }
 
+    public void updateData(List<ShowTimes> newList) {
+        this.showTimesList = newList == null ? new ArrayList<>() : newList;
+        notifyDataSetChanged();
+    }
+
     static class ShowtimeViewHolder extends RecyclerView.ViewHolder {
-        TextView tvTheater, tvTime, tvPrice;
-        Button btnSelect;
+        private final TextView tvTheater;
+        private final TextView tvTime;
+        private final TextView tvPrice;
+        private final Button btnSelect;
 
         public ShowtimeViewHolder(@NonNull View itemView) {
             super(itemView);

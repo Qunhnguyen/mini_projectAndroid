@@ -1,28 +1,25 @@
 package com.example.shopping_app;
 
-import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ProgressBar;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
+
 import com.example.shopping_app.data.AppDatabase;
 import com.example.shopping_app.data.entity.User;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Activity xử lý đăng nhập người dùng.
- * Hỗ trợ xác thực từ database và quản lý trạng thái qua SharedPreferences.
- */
 public class LoginActivity extends AppCompatActivity {
-    private EditText etUser, etPass;
-    private Button btnLogin;
-    private ImageButton btnClose;
+    private static final int MIN_PASSWORD_LENGTH = 6;
+
+    private EditText etUser;
+    private EditText etPass;
     private AppDatabase db;
     private PrefManager pref;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -35,37 +32,47 @@ public class LoginActivity extends AppCompatActivity {
         db = AppDatabase.getInstance(this);
         pref = new PrefManager(this);
 
-        initUI();
+        initUi();
     }
 
-    private void initUI() {
+    private void initUi() {
         etUser = findViewById(R.id.et_username);
         etPass = findViewById(R.id.et_password);
-        btnLogin = findViewById(R.id.btn_login);
-        btnClose = findViewById(R.id.btn_login_close);
+        Button btnLogin = findViewById(R.id.btn_login);
+        ImageButton btnClose = findViewById(R.id.btn_login_close);
+
+        etUser.setText(AppConstants.DEMO_USERNAME);
+        etPass.setText(AppConstants.DEMO_PASSWORD);
 
         btnLogin.setOnClickListener(v -> attemptLogin());
         btnClose.setOnClickListener(v -> finish());
     }
 
-    /**
-     * Kiểm tra tính hợp lệ của dữ liệu đầu vào và thực hiện đăng nhập
-     */
     private void attemptLogin() {
-        String username = etUser.getText().toString().trim();
-        String password = etPass.getText().toString().trim();
+        String username = readTrimmedText(etUser);
+        String password = readTrimmedText(etPass);
+
+        etUser.setError(null);
+        etPass.setError(null);
 
         if (TextUtils.isEmpty(username)) {
-            etUser.setError("Vui lòng nhập tên đăng nhập");
+            etUser.setError(getString(R.string.error_empty_username));
+            etUser.requestFocus();
             return;
         }
 
         if (TextUtils.isEmpty(password)) {
-            etPass.setError("Vui lòng nhập mật khẩu");
+            etPass.setError(getString(R.string.error_empty_password));
+            etPass.requestFocus();
             return;
         }
 
-        // Thực hiện truy vấn database trên luồng nền
+        if (password.length() < MIN_PASSWORD_LENGTH) {
+            etPass.setError(getString(R.string.error_short_password, MIN_PASSWORD_LENGTH));
+            etPass.requestFocus();
+            return;
+        }
+
         executor.execute(() -> {
             try {
                 User user = db.userDao().login(username, password);
@@ -73,18 +80,26 @@ public class LoginActivity extends AppCompatActivity {
                     if (user != null) {
                         handleLoginSuccess(user);
                     } else {
-                        showError("Tài khoản hoặc mật khẩu không chính xác!");
+                        showError(getString(R.string.error_invalid_credentials));
                     }
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> showError("Lỗi hệ thống: " + e.getMessage()));
+                runOnUiThread(() -> showError(getString(R.string.error_system, e.getMessage())));
             }
         });
     }
 
+    private String readTrimmedText(EditText editText) {
+        return editText.getText() == null ? "" : editText.getText().toString().trim();
+    }
+
     private void handleLoginSuccess(User user) {
         pref.setUserId(user.getUserId());
-        Toast.makeText(this, "Chào mừng " + user.getFullName() + " đã quay trở lại!", Toast.LENGTH_SHORT).show();
+        Toast.makeText(
+                this,
+                getString(R.string.login_success, user.getFullName()),
+                Toast.LENGTH_SHORT
+        ).show();
         setResult(RESULT_OK);
         finish();
     }
@@ -96,8 +111,6 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (executor != null) {
-            executor.shutdown();
-        }
+        executor.shutdown();
     }
 }

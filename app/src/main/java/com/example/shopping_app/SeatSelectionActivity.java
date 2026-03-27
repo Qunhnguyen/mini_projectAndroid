@@ -10,15 +10,18 @@ import android.widget.GridLayout;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
 import com.example.shopping_app.data.AppDatabase;
 import com.example.shopping_app.data.entity.Movie;
 import com.example.shopping_app.data.entity.ShowTimes;
 import com.example.shopping_app.data.entity.Theater;
 import com.example.shopping_app.data.entity.Tickets;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -26,13 +29,10 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Activity xử lý việc lựa chọn chỗ ngồi và xác nhận đặt vé phim.
- * Luồng: Chọn ghế -> Kiểm tra đăng nhập -> Xác nhận thanh toán -> Lưu vé.
- */
 public class SeatSelectionActivity extends AppCompatActivity {
     private GridLayout gridSeats;
-    private TextView tvMovieInfo, tvSelectedSeat;
+    private TextView tvMovieInfo;
+    private TextView tvSelectedSeat;
     private Button btnConfirm;
     private AppDatabase db;
     private PrefManager pref;
@@ -41,7 +41,6 @@ public class SeatSelectionActivity extends AppCompatActivity {
     private ShowTimes currentShowTime;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    // Launcher xử lý kết quả trả về từ LoginActivity
     private final ActivityResultLauncher<Intent> loginLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
@@ -56,18 +55,24 @@ public class SeatSelectionActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_seat_selection);
 
-        initDatabase();
-        initUI();
+        initDependencies();
+        if (showTimeId == AppConstants.INVALID_ID) {
+            Toast.makeText(this, R.string.error_invalid_showtime, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+
+        initUi();
         loadShowtimeData();
     }
 
-    private void initDatabase() {
+    private void initDependencies() {
         db = AppDatabase.getInstance(this);
         pref = new PrefManager(this);
-        showTimeId = getIntent().getIntExtra("SHOWTIME_ID", -1);
+        showTimeId = getIntent().getIntExtra(AppConstants.EXTRA_SHOWTIME_ID, AppConstants.INVALID_ID);
     }
 
-    private void initUI() {
+    private void initUi() {
         gridSeats = findViewById(R.id.grid_seats);
         tvMovieInfo = findViewById(R.id.tv_seat_movie_info);
         tvSelectedSeat = findViewById(R.id.tv_selected_seat);
@@ -76,48 +81,61 @@ public class SeatSelectionActivity extends AppCompatActivity {
 
         btnBack.setOnClickListener(v -> finish());
         btnConfirm.setOnClickListener(v -> handleBookingProcess());
+        updateSelectedSeatLabel();
+        updateConfirmButtonState();
     }
 
     private void handleBookingProcess() {
         if (selectedSeat.isEmpty()) {
-            Toast.makeText(this, "Vui lòng chọn một vị trí ghế!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.prompt_select_seat, Toast.LENGTH_SHORT).show();
             return;
         }
-        
+
         if (!pref.isLoggedIn()) {
-            Toast.makeText(this, "Bạn cần đăng nhập để thực hiện đặt vé!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.prompt_login_before_booking, Toast.LENGTH_SHORT).show();
             loginLauncher.launch(new Intent(this, LoginActivity.class));
-        } else {
-            showBookingConfirmation();
+            return;
         }
+
+        showBookingConfirmation();
     }
 
-    /**
-     * Hiển thị hộp thoại xác nhận trước khi lưu vào database (Tăng tính trải nghiệm người dùng)
-     */
     private void showBookingConfirmation() {
+        if (currentShowTime == null) {
+            Toast.makeText(this, R.string.error_invalid_showtime, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         new AlertDialog.Builder(this)
-                .setTitle("Xác nhận đặt vé")
-                .setMessage("Bạn có chắc chắn muốn đặt ghế " + selectedSeat + " cho suất chiếu này không?")
-                .setPositiveButton("Xác nhận", (dialog, which) -> confirmBooking())
-                .setNegativeButton("Hủy", null)
+                .setTitle(R.string.booking_dialog_title)
+                .setMessage(getString(R.string.booking_dialog_message, selectedSeat))
+                .setPositiveButton(R.string.action_confirm, (dialog, which) -> confirmBooking())
+                .setNegativeButton(R.string.action_cancel, null)
                 .show();
     }
 
     private void loadShowtimeData() {
         executor.execute(() -> {
             currentShowTime = db.showTimesDao().getShowTimeById(showTimeId);
-            if (currentShowTime != null) {
-                Movie movie = db.movieDao().getMovieById(currentShowTime.getMovieId());
-                Theater theater = db.theaterDao().getTheaterById(currentShowTime.getTheaterId());
-                List<String> bookedSeats = db.ticketsDao().getBookedSeats(showTimeId);
-
+            if (currentShowTime == null) {
                 runOnUiThread(() -> {
-                    String info = movie.getTitle() + "\n" + theater.getName() + " - " + currentShowTime.getDateTime();
-                    tvMovieInfo.setText(info);
-                    generateSeatGrid(bookedSeats);
+                    Toast.makeText(this, R.string.error_invalid_showtime, Toast.LENGTH_SHORT).show();
+                    finish();
                 });
+                return;
             }
+
+            Movie movie = db.movieDao().getMovieById(currentShowTime.getMovieId());
+            Theater theater = db.theaterDao().getTheaterById(currentShowTime.getTheaterId());
+            List<String> bookedSeats = db.ticketsDao().getBookedSeats(showTimeId);
+
+            runOnUiThread(() -> {
+                String movieTitle = movie != null ? movie.getTitle() : getString(R.string.label_unknown_movie);
+                String theaterName = theater != null ? theater.getName() : getString(R.string.label_unknown_theater);
+                String info = movieTitle + "\n" + theaterName + " - " + currentShowTime.getDateTime();
+                tvMovieInfo.setText(info);
+                generateSeatGrid(bookedSeats);
+            });
         });
     }
 
@@ -126,14 +144,14 @@ public class SeatSelectionActivity extends AppCompatActivity {
         int rows = 4;
         int cols = 5;
 
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                String seatName = (char) ('A' + i) + String.valueOf(j + 1);
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                String seatName = (char) ('A' + row) + String.valueOf(col + 1);
                 TextView seatView = new TextView(this);
                 seatView.setText(seatName);
                 seatView.setPadding(20, 20, 20, 20);
                 seatView.setGravity(Gravity.CENTER);
-                
+
                 GridLayout.LayoutParams params = new GridLayout.LayoutParams();
                 params.setMargins(10, 10, 10, 10);
                 seatView.setLayoutParams(params);
@@ -151,29 +169,47 @@ public class SeatSelectionActivity extends AppCompatActivity {
     }
 
     private void updateSeatSelection(TextView view, String seatName) {
-        // Reset trạng thái các ghế khác
-        for (int k = 0; k < gridSeats.getChildCount(); k++) {
-            View child = gridSeats.getChildAt(k);
+        for (int index = 0; index < gridSeats.getChildCount(); index++) {
+            View child = gridSeats.getChildAt(index);
             if (child.isEnabled()) {
                 child.setBackgroundResource(R.drawable.bg_chip_unselected);
             }
         }
-        // Cập nhật ghế mới chọn
+
         selectedSeat = seatName;
         view.setBackgroundResource(R.drawable.bg_chip_selected);
-        tvSelectedSeat.setText("Ghế đã chọn: " + selectedSeat);
+        updateSelectedSeatLabel();
+        updateConfirmButtonState();
+    }
+
+    private void updateSelectedSeatLabel() {
+        String seatLabel = selectedSeat.isEmpty()
+                ? getString(R.string.label_seat_not_selected)
+                : selectedSeat;
+        tvSelectedSeat.setText(getString(R.string.selected_seat_label, seatLabel));
+    }
+
+    private void updateConfirmButtonState() {
+        boolean enabled = !selectedSeat.isEmpty();
+        btnConfirm.setEnabled(enabled);
+        btnConfirm.setAlpha(enabled ? 1f : 0.6f);
     }
 
     private void confirmBooking() {
         executor.execute(() -> {
-            String date = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(new Date());
-            Tickets ticket = new Tickets(showTimeId, pref.getUserId(), selectedSeat, date, currentShowTime.getPrice());
+            String bookingDate = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(new Date());
+            Tickets ticket = new Tickets(
+                    showTimeId,
+                    pref.getUserId(),
+                    selectedSeat,
+                    bookingDate,
+                    currentShowTime.getPrice()
+            );
             db.ticketsDao().insert(ticket);
-            
+
             runOnUiThread(() -> {
-                Toast.makeText(this, "Đặt vé thành công!", Toast.LENGTH_LONG).show();
-                Intent intent = new Intent(this, MyTicketsActivity.class);
-                startActivity(intent);
+                Toast.makeText(this, R.string.booking_success, Toast.LENGTH_LONG).show();
+                startActivity(new Intent(this, MyTicketsActivity.class));
                 finish();
             });
         });
